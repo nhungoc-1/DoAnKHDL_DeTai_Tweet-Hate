@@ -28,41 +28,37 @@ from src.utils import get_project_root
 PROJECT_ROOT = get_project_root()
 NB_DIR = PROJECT_ROOT / "notebooks"
 
-BOOTSTRAP_CODE = """# === CELL BOOTSTRAP CHUẨN CHO MỌI NOTEBOOK TRONG DỰ ÁN ===
+BOOTSTRAP_CODE = """# === THIẾT LẬP MÔI TRƯỜNG & NẠP THƯ VIỆN DỰ ÁN ===
 import os, sys, subprocess
 from pathlib import Path
 
 os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
 os.environ.setdefault("OMP_NUM_THREADS", "1")
-REPO_URL = "https://github.com/devtitcun888/duan-tweet-hate.git"
+REPO_URL = "https://github.com/nhungoc-1/DoAnKHDL_DeTai_Tweet-Hate.git"
 
 IN_COLAB = "google.colab" in sys.modules
 if IN_COLAB:
-    drive_mounted = False
-    try:
-        from google.colab import drive
-        drive.mount("/content/drive")
-        drive_mounted = True
-    except Exception as e:
-        print(f"[BOOTSTRAP] Không mount Google Drive ({e}), dùng bộ nhớ phiên Colab /content.")
+    print("[SETUP] Đang khởi tạo môi trường Google Colab...", flush=True)
     for candidate in [
-        Path("/content/drive/MyDrive/duan-tweet-hate"),
-        Path("/content/drive/MyDrive/tweet-hate"),
-        Path("/content/drive/MyDrive/DOAN_COLAB"),
-        Path("/content/duan-tweet-hate"),
+        Path("/content/DoAnKHDL_DeTai_Tweet-Hate"),
+        Path("/content/drive/MyDrive/DoAnKHDL_DeTai_Tweet-Hate"),
+        Path("/content/drive/MyDrive/DO_AN_KHDL"),
         Path.cwd().parent if Path.cwd().name == "notebooks" else Path.cwd(),
     ]:
         if (candidate / "config.yaml").exists():
             PROJECT_DIR = candidate
+            subprocess.run(["git", "-C", str(PROJECT_DIR), "pull", "--ff-only"], check=False)
             break
     else:
-        PROJECT_DIR = Path("/content/drive/MyDrive/duan-tweet-hate") if drive_mounted else Path("/content/duan-tweet-hate")
-        if not (PROJECT_DIR / "config.yaml").exists():
-            print(f"[BOOTSTRAP] Đang tải dự án từ {REPO_URL} vào {PROJECT_DIR}...")
-            subprocess.run(["git", "clone", REPO_URL, str(PROJECT_DIR)], check=True)
-    req_file = PROJECT_DIR / "requirements.txt"
-    if req_file.exists():
-        subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-r", str(req_file)], check=False)
+        PROJECT_DIR = Path("/content/DoAnKHDL_DeTai_Tweet-Hate")
+        print(f"[SETUP] Đang tải dự án từ GitHub vào {PROJECT_DIR} (mất ~3 giây)...", flush=True)
+        subprocess.run(["git", "clone", "--depth", "1", REPO_URL, str(PROJECT_DIR)], check=True)
+    print("[SETUP] Đang kiểm tra & cài đặt các thư viện bổ sung (mất ~5-10 giây)...", flush=True)
+    subprocess.run([
+        sys.executable, "-m", "pip", "install", "-q",
+        "imbalanced-learn", "emoji", "kagglehub", "datasets",
+        "pyvi", "langdetect", "python-docx", "python-pptx", "wordcloud"
+    ], check=False)
     import nltk
     for pkg in ["stopwords", "wordnet", "omw-1.4"]:
         nltk.download(pkg, quiet=True)
@@ -76,7 +72,8 @@ if str(PROJECT_DIR) not in sys.path:
 from src.utils import set_seed, load_config, mask_profanity
 set_seed(42)
 CFG = load_config()
-print(f"[BOOTSTRAP] PROJECT_DIR = {PROJECT_DIR}")
+(PROJECT_DIR / "db").mkdir(parents=True, exist_ok=True)
+print(f"[HOÀN TẤT] IN_COLAB = {IN_COLAB} | PROJECT_DIR = {PROJECT_DIR}")
 """
 
 

@@ -4,14 +4,60 @@ with all rubric/internal markers ('điểm cộng', 'bonus', 'P0..P12', 'V0..V8'
 from __future__ import annotations
 
 import glob
+import json
 import re
 from pathlib import Path
 
-from docx import Document
-import nbformat
-from pptx import Presentation
-
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+BOOTSTRAP_LINES = [
+    "# === THIẾT LẬP MÔI TRƯỜNG & NẠP THƯ VIỆN DỰ ÁN ===\n",
+    "import os, sys, subprocess\n",
+    "from pathlib import Path\n",
+    "\n",
+    "os.environ.setdefault(\"OPENBLAS_NUM_THREADS\", \"1\")\n",
+    "os.environ.setdefault(\"OMP_NUM_THREADS\", \"1\")\n",
+    "REPO_URL = \"https://github.com/nhungoc-1/DoAnKHDL_DeTai_Tweet-Hate.git\"\n",
+    "\n",
+    "IN_COLAB = \"google.colab\" in sys.modules\n",
+    "if IN_COLAB:\n",
+    "    print(\"[SETUP] Đang khởi tạo môi trường Google Colab...\", flush=True)\n",
+    "    for candidate in [\n",
+    "        Path(\"/content/DoAnKHDL_DeTai_Tweet-Hate\"),\n",
+    "        Path(\"/content/drive/MyDrive/DoAnKHDL_DeTai_Tweet-Hate\"),\n",
+    "        Path(\"/content/drive/MyDrive/DO_AN_KHDL\"),\n",
+    "        Path.cwd().parent if Path.cwd().name == \"notebooks\" else Path.cwd(),\n",
+    "    ]:\n",
+    "        if (candidate / \"config.yaml\").exists():\n",
+    "            PROJECT_DIR = candidate\n",
+    "            subprocess.run([\"git\", \"-C\", str(PROJECT_DIR), \"pull\", \"--ff-only\"], check=False)\n",
+    "            break\n",
+    "    else:\n",
+    "        PROJECT_DIR = Path(\"/content/DoAnKHDL_DeTai_Tweet-Hate\")\n",
+    "        print(f\"[SETUP] Đang tải dự án từ GitHub vào {PROJECT_DIR} (mất ~3 giây)...\", flush=True)\n",
+    "        subprocess.run([\"git\", \"clone\", \"--depth\", \"1\", REPO_URL, str(PROJECT_DIR)], check=True)\n",
+    "    print(\"[SETUP] Đang kiểm tra & cài đặt các thư viện bổ sung (mất ~5-10 giây)...\", flush=True)\n",
+    "    subprocess.run([\n",
+    "        sys.executable, \"-m\", \"pip\", \"install\", \"-q\",\n",
+    "        \"imbalanced-learn\", \"emoji\", \"kagglehub\", \"datasets\",\n",
+    "        \"pyvi\", \"langdetect\", \"python-docx\", \"python-pptx\", \"wordcloud\"\n",
+    "    ], check=False)\n",
+    "    import nltk\n",
+    "    for pkg in [\"stopwords\", \"wordnet\", \"omw-1.4\"]:\n",
+    "        nltk.download(pkg, quiet=True)\n",
+    "else:\n",
+    "    PROJECT_DIR = Path.cwd().parent if Path.cwd().name == \"notebooks\" else Path.cwd()\n",
+    "\n",
+    "os.chdir(PROJECT_DIR)\n",
+    "if str(PROJECT_DIR) not in sys.path:\n",
+    "    sys.path.insert(0, str(PROJECT_DIR))\n",
+    "\n",
+    "from src.utils import set_seed, load_config, mask_profanity\n",
+    "set_seed(42)\n",
+    "CFG = load_config()\n",
+    "(PROJECT_DIR / \"db\").mkdir(parents=True, exist_ok=True)\n",
+    "print(f\"[HOÀN TẤT] IN_COLAB = {IN_COLAB} | PROJECT_DIR = {PROJECT_DIR}\")",
+]
 
 # Ordered replacements to make prose natural academic Vietnamese for instructor presentation
 TEXT_REPLACEMENTS: list[tuple[str, str]] = [
@@ -85,22 +131,45 @@ TEXT_REPLACEMENTS: list[tuple[str, str]] = [
 ]
 
 
-def clean_str(text: str) -> str:
+def clean_str(text: str, is_code: bool = False) -> str:
     s = text
     for pattern, repl in TEXT_REPLACEMENTS:
         s = re.sub(pattern, repl, s)
-    # Clean double spaces before punctuation
-    s = re.sub(r"  +\)", ")", s)
-    s = re.sub(r"\(\s*\)", "", s)
+    if not is_code:
+        # Clean double spaces before punctuation only in prose/markdown, NEVER in Python code
+        s = re.sub(r"  +\)", ")", s)
+        s = re.sub(r"\(\s*\)", "", s)
     return s
+
+
+def _to_lines(text: str) -> list[str]:
+    lines = text.splitlines(keepends=True)
+    return lines if lines else [""]
+
+
+def _clean_cell(cell: dict) -> None:
+    src_str = "".join(cell["source"]) if isinstance(cell["source"], list) else str(cell["source"])
+    if cell.get("cell_type") == "code":
+        if "IN_COLAB" in src_str and "REPO_URL" in src_str:
+            cell["source"] = list(BOOTSTRAP_LINES)
+        else:
+            cell["source"] = _to_lines(clean_str(src_str, is_code=True))
+        if "outputs" in cell:
+            for out in cell["outputs"]:
+                if "text" in out:
+                    if isinstance(out["text"], list):
+                        out["text"] = [clean_str(t, is_code=True) for t in out["text"]]
+                    elif isinstance(out["text"], str):
+                        out["text"] = clean_str(out["text"], is_code=True)
+    else:
+        cell["source"] = _to_lines(clean_str(src_str, is_code=False))
 
 
 def build_clean_presentation_notebook() -> Path:
     src_nb_path = PROJECT_ROOT / "notebooks" / "MASTER_ALL_IN_ONE_COLAB.ipynb"
-    nb = nbformat.read(src_nb_path, as_version=4)
+    nb = json.loads(src_nb_path.read_text(encoding="utf-8"))
 
-    # Replace top intro cell with exact assignment rubric wording requested by the user
-    nb.cells[0].source = (
+    top_prompt_md = (
         "# 1. Twitter Sentimental Analysis\n\n"
         "**Câu 1 (2,0 điểm): Thu thập và phân tích dữ liệu:**\n"
         "- Phân tích bộ dữ liệu được giao hoặc thu thập dữ liệu dựa trên các API (1đ),\n"
@@ -118,82 +187,46 @@ def build_clean_presentation_notebook() -> Path:
         "- Trình bày báo cáo và trả lời câu hỏi (1,0đ)"
     )
 
-    if len(nb.cells) > 1 and nb.cells[1].cell_type == "markdown":
-        nb.cells[1].source = (
+    nb["cells"][0]["source"] = _to_lines(top_prompt_md)
+
+    if len(nb["cells"]) > 1 and nb["cells"][1].get("cell_type") == "markdown":
+        nb["cells"][1]["source"] = _to_lines(
             "## Khởi tạo môi trường Google Colab & Import dữ liệu lên Python\n"
             "- Thiết lập môi trường thực thi tự động trên **Google Colab** và **Python**.\n"
             "- Cố định `seed = 42` trên toàn bộ thư viện (`random`, `numpy`, `sklearn`, `torch`) để đảm bảo tính tái lập kết quả."
         )
 
-    for cell in nb.cells[1:]:
-        cell.source = clean_str(cell.source)
-        # Also clean text outputs if any contain [BOOTSTRAP]
-        if cell.cell_type == "code" and "outputs" in cell:
-            for out in cell.outputs:
-                if "text" in out:
-                    if isinstance(out["text"], list):
-                        out["text"] = [clean_str(t) for t in out["text"]]
-                    elif isinstance(out["text"], str):
-                        out["text"] = clean_str(out["text"])
+    for cell in nb["cells"][1:]:
+        _clean_cell(cell)
 
     out_nb_path = PROJECT_ROOT / "notebooks" / "BAO_CAO_DO_AN_TWEET_HATE_CLASSIFICATION.ipynb"
-    nbformat.write(nb, out_nb_path)
+    nb_json = json.dumps(nb, indent=1, ensure_ascii=False) + "\n"
+    out_nb_path.write_text(nb_json, encoding="utf-8")
+    src_nb_path.write_text(nb_json, encoding="utf-8")
 
-    # Also update MASTER_ALL_IN_ONE_COLAB.ipynb and individual notebooks so all of them are clean
-    nbformat.write(nb, src_nb_path)
     for p in sorted(glob.glob(str(PROJECT_ROOT / "notebooks" / "*.ipynb"))):
         if Path(p).name in ("BAO_CAO_DO_AN_TWEET_HATE_CLASSIFICATION.ipynb", "MASTER_ALL_IN_ONE_COLAB.ipynb"):
             continue
-        sub_nb = nbformat.read(p, as_version=4)
-        if Path(p).name == "00_colab_bootstrap.ipynb" and len(sub_nb.cells) > 0 and sub_nb.cells[0].cell_type == "markdown":
-            sub_nb.cells[0].source = nb.cells[0].source
-        for c in sub_nb.cells:
-            c.source = clean_str(c.source)
-        nbformat.write(sub_nb, p)
+        sub_nb = json.loads(Path(p).read_text(encoding="utf-8"))
+        if Path(p).name == "00_colab_bootstrap.ipynb" and len(sub_nb["cells"]) > 0 and sub_nb["cells"][0].get("cell_type") == "markdown":
+            sub_nb["cells"][0]["source"] = _to_lines(top_prompt_md)
+        for c in sub_nb["cells"]:
+            _clean_cell(c)
+        Path(p).write_text(json.dumps(sub_nb, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
 
-    print(f"Created clean presentation notebook: {out_nb_path.name}")
+    print(f"Updated all 16 notebooks cleanly ({out_nb_path.name})")
     return out_nb_path
 
 
 def clean_docx_and_pptx() -> None:
-    # Clean report.docx
-    docx_path = PROJECT_ROOT / "reports" / "report.docx"
-    if docx_path.exists():
-        doc = Document(str(docx_path))
-        for p in doc.paragraphs:
-            for r in p.runs:
-                if r.text:
-                    r.text = clean_str(r.text)
-        for tbl in doc.tables:
-            for row in tbl.rows:
-                for cell in row.cells:
-                    for p in cell.paragraphs:
-                        for r in p.runs:
-                            if r.text:
-                                r.text = clean_str(r.text)
-        doc.save(str(docx_path))
-        print("Cleaned reports/report.docx")
+    # Clean app/app.py using is_code=True so Python syntax () is never altered
+    app_fp = PROJECT_ROOT / "app" / "app.py"
+    if app_fp.exists():
+        app_fp.write_text(clean_str(app_fp.read_text(encoding="utf-8"), is_code=True), encoding="utf-8")
+        print("Cleaned app/app.py safely")
 
-    # Clean slides.pptx
-    pptx_path = PROJECT_ROOT / "reports" / "slides.pptx"
-    if pptx_path.exists():
-        prs = Presentation(str(pptx_path))
-        for slide in prs.slides:
-            for shape in slide.shapes:
-                if shape.has_text_frame:
-                    for p in shape.text_frame.paragraphs:
-                        for r in p.runs:
-                            if r.text:
-                                r.text = clean_str(r.text)
-            if slide.has_notes_slide and slide.notes_slide.notes_text_frame:
-                notes_tf = slide.notes_slide.notes_text_frame
-                notes_tf.text = clean_str(notes_tf.text)
-        prs.save(str(pptx_path))
-        print("Cleaned reports/slides.pptx")
-
-    # Clean app/app.py and markdown files
+    # Clean markdown files
     for md_rel in [
-        "app/app.py",
         "README.md",
         "reports/speaker_script.md",
         "reports/demo_script.md",
@@ -202,7 +235,7 @@ def clean_docx_and_pptx() -> None:
     ]:
         fp = PROJECT_ROOT / md_rel
         if fp.exists():
-            fp.write_text(clean_str(fp.read_text(encoding="utf-8")), encoding="utf-8")
+            fp.write_text(clean_str(fp.read_text(encoding="utf-8"), is_code=False), encoding="utf-8")
             print(f"Cleaned {md_rel}")
 
 

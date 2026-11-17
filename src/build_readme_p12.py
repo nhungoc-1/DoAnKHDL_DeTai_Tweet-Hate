@@ -53,8 +53,8 @@ Qua kiểm định thực tế tại giai đoạn P1 (`src/data_io.py` & `report
 ## 2. Cấu trúc Thư mục Dự án
 
 ```text
-tweet-hate/
-├─ AGENTS.md                      # Đặc tả kỹ thuật chi tiết P0 -> P12
+DoAnKHDL_DeTai_Tweet-Hate/
+├─ AGENTS.md                      # Đặc tả kỹ thuật chi tiết toàn bộ quy trình
 ├─ README.md                      # Tài liệu hướng dẫn chạy lại toàn diện
 ├─ requirements.txt               # Danh sách thư viện tương thích Colab & Local
 ├─ config.yaml                    # Cấu hình trung tâm (seed=42, đường dẫn, tham số)
@@ -64,10 +64,10 @@ tweet-hate/
 │   ├─ processed/clean.csv        # Dữ liệu sau làm sạch 12 bước & khử trùng (28,330 dòng)
 │   ├─ splits/{{train,val,test}}.csv# Chia cố định 70/15/15 (19,830 / 4,250 / 4,250 dòng)
 │   └─ real_world/                # Bộ thực tế 300 mẫu (real_world_labeled.csv, to_label.csv, ANNOTATION_GUIDE.md)
-├─ db/tweets.db                   # Cơ sở dữ liệu SQLite phục vụ truy vấn SQL (P3)
+├─ db/tweets.db                   # Cơ sở dữ liệu SQLite phục vụ truy vấn SQL
 ├─ sql/                           # 5 kịch bản SQL (00_schema, 10_token_freq, 20_log_odds, 30_cooccur, 40_lexicon)
 ├─ src/                           # Mã nguồn mô-đun hóa (utils, data_io, clean, features, models, evaluate, threshold, predict, transformer)
-├─ notebooks/                     # 9 Jupyter Notebooks (00_colab_bootstrap.ipynb -> 08_realworld_test.ipynb) đã chạy sẵn output
+├─ notebooks/                     # Các Jupyter Notebooks báo cáo & thực nghiệm đã chạy sẵn output
 ├─ app/app.py                     # Ứng dụng Web Streamlit 3 Tab tiếng Việt
 ├─ models/                        # Mô hình chốt (best_model.joblib, threshold.json, model_card.json)
 ├─ reports/                       # Toàn bộ báo cáo (report.docx/pdf, slides.pptx/pdf, qa_bank.md, speaker_script.md, demo_script.md, cheat_sheet.md, facts.json, figures/, tables/)
@@ -78,11 +78,12 @@ tweet-hate/
 
 ## 3. Hướng dẫn Kết nối & Chạy trên Google Colab và Máy Local
 
-### Cách 1: Chạy trực tiếp trên Google Colab (Khuyên dùng khi cần GPU T4)
-1. Tải thư mục dự án lên Google Drive tại đường dẫn `/content/drive/MyDrive/tweet-hate` (hoặc `/content/drive/MyDrive/DOAN_COLAB`).
-2. Mở bất kỳ notebook nào trong thư mục `notebooks/` (từ `00_colab_bootstrap.ipynb` đến `08_realworld_test.ipynb`) bằng **Google Colab**.
-3. Cell đầu tiên (`bootstrap`) sẽ tự động nhận diện môi trường Colab, Mount Google Drive, cài đặt `requirements.txt`, tải tài nguyên NLTK và cố định `seed = 42`.
-4. Chọn **Runtime → Run all** để chạy lại toàn bộ thực nghiệm từ đầu đến cuối.
+### Cách 1: Chạy trực tiếp trên Google Colab (Tự động tải từ GitHub — 1-Click Run All)
+- **Mở nhanh Notebook Báo cáo Tổng hợp trên Google Colab:**  
+  [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/nhungoc-1/DoAnKHDL_DeTai_Tweet-Hate/blob/main/notebooks/BAO_CAO_DO_AN_TWEET_HATE_CLASSIFICATION.ipynb)
+1. Mở trực tiếp từ GitHub qua liên kết trên hoặc vào **Google Colab → File → Open notebook → GitHub**, nhập URL: `https://github.com/nhungoc-1/DoAnKHDL_DeTai_Tweet-Hate.git` và chọn bất kỳ notebook nào trong thư mục `notebooks/`.
+2. Ô code đầu tiên (`SETUP`) sẽ tự động nhận diện môi trường Google Colab, tải mã nguồn dự án từ GitHub `https://github.com/nhungoc-1/DoAnKHDL_DeTai_Tweet-Hate.git` vào `/content/DoAnKHDL_DeTai_Tweet-Hate`, cài đặt các thư viện bổ sung, tải tài nguyên NLTK và cố định `seed = 42`.
+3. Chọn **Runtime → Run all** để chạy lại toàn bộ thực nghiệm từ đầu đến cuối.
 
 ### Cách 2: Chạy lại trên Máy Local (Windows / Linux / macOS)
 ```bash
